@@ -1,0 +1,8 @@
+miditoolkit
+note_seq
+pyfluidsynth
+soundfile
+datasets
+transformers[torch]>=4.46,<5
+accelerate
+wandb
