@@ -4,6 +4,8 @@
 
 A GPT-2 language model trained from scratch to compose multi-track MIDI music. MIDI files are cut into 8-bar pieces and written out as text, and the model learns to continue that text one musical event at a time. While it trains, it composes a new piece at every evaluation and plays it back, so you can hear it go from noise to music.
 
+I built this pipeline during my internship at Intel to generate Indian classical music, training it on a MIDI dataset we built by hand from recordings. That dataset isn't included here. The example run below uses public MIDI files to show the code working end to end.
+
 ## How it works
 
 1. **Cut into pieces.** Every MIDI file is split into 8-bar chunks (4/4). Notes go to the chunk they start in, with times shifted so each chunk starts at zero. Chunks with fewer than 10 notes are dropped.
@@ -20,6 +22,27 @@ A GPT-2 language model trained from scratch to compose multi-track MIDI music. M
 3. **Tokenizer.** GPT-2's English tokenizer would break `NOTE_ON=60` into fragments, so a word-level tokenizer is trained instead: every distinct MMM token is one vocabulary entry. It splits on spaces only. Splitting on `=` as well would make the generated text impossible to decode back into notes.
 4. **Model.** GPT-2 with 6 layers, 8 attention heads and 512-dimensional embeddings, trained from random weights on next-token prediction with a 512-token context.
 5. **Back to music.** A decoder turns generated tokens into a `NoteSequence`, restarting the clock at each track and snapping to bar lines, and closes any notes the model left open. It's rendered to audio with FluidSynth and saved as `.wav` and `.mid`.
+
+## Example run
+
+To show the code working, I trained the notebook's pipeline on 3,000 songs from the public [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/) (Clean MIDI subset) on an Apple M4 laptop.
+
+| | |
+|---|---|
+| Training pieces | 40,983 eight-bar pieces (36,884 for training, 1,000 held out for validation) |
+| Vocabulary | 434 tokens |
+| Model | GPT-2, 6 layers, 8 heads, 512-dim embeddings, 19.4M parameters, randomly initialized |
+| Training | 3,000 steps, batch size 16 (about 1.3 epochs) |
+
+![Training and validation loss](results/loss_curve.png)
+
+Validation loss fell from 1.93 to 0.99 over 3,000 steps and stayed below the training loss throughout, so the model is generalizing to pieces it hasn't seen rather than memorizing.
+
+![Piano roll of a generated piece](results/generated_piano_roll.png)
+
+A piece the model composed from the prompt `PIECE_START TRACK_START`: a bass line with guitar phrases on top, across three instruments. At this stage the output has a steady pulse and plausible instrument parts, but it is repetitive; longer training would be the next step.
+
+Generated samples are in [`results/samples/`](results/samples). Open them in GarageBand or any MIDI player. `early_step_500.mid` is from early in training, for comparison.
 
 ## Run it
 
