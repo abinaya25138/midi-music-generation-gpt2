@@ -4,7 +4,7 @@
 
 A GPT-2 language model trained from scratch to compose multi-track MIDI music. MIDI files are cut into 8-bar pieces and written out as text, and the model learns to continue that text one musical event at a time. While it trains, it composes a new piece at every evaluation and plays it back, so you can hear it go from noise to music.
 
-I built this pipeline during my internship at Intel to generate Indian classical music, training it on a MIDI dataset we built by hand from recordings. That dataset isn't included here. The example run below uses public MIDI files to show the code working end to end.
+I built this pipeline during my internship at Intel to generate Indian classical music. No MIDI dataset existed for this music, so we built one: we started from the [Thaat and Raga Forest (TRF) dataset](https://ieee-dataport.org/documents/thaat-and-raga-forest-trf-dataset) of Hindustani recordings, classified the recordings, and converted them into MIDI chunks by hand. That MIDI dataset isn't included here. The example run below uses public MIDI files to show the code working end to end.
 
 ## How it works
 
@@ -70,6 +70,11 @@ Everything the notebook produces is saved to `MyDrive/music_gpt2/`:
 - Pieces are assumed to be in 4/4 and are played back at 120 BPM, because the tokens don't record tempo.
 - Drum tracks aren't marked separately, so they play back on a melodic instrument.
 - Busy multi-track pieces longer than 512 tokens are truncated, which drops their last tracks.
+
+## Data credits
+
+- **Thaat and Raga Forest (TRF) dataset**, the base for the Indian classical MIDI dataset built at Intel: S. Majumder and A. Bhattacharya, IEEE DataPort, 2024, [doi:10.21227/0xtb-fn23](https://doi.org/10.21227/0xtb-fn23), CC BY 4.0. Related paper: S. Majumder and A. Bhattacharya, "An automatic thaat and raga identification system using CNN-based models", *Innovations in Systems and Software Engineering*, 2023, [doi:10.1007/s11334-023-00541-2](https://doi.org/10.1007/s11334-023-00541-2).
+- **Lakh MIDI Dataset**, used for the example run: C. Raffel, *Learning-Based Methods for Comparing Sequences, with Applications to Audio-to-MIDI Alignment and Matching*, PhD thesis, Columbia University, 2016. [colinraffel.com/projects/lmd](https://colinraffel.com/projects/lmd/)
 
 ## Tech stack
 
