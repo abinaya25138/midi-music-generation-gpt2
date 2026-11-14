@@ -44,6 +44,29 @@ A piece the model composed from the prompt `PIECE_START TRACK_START`: a bass lin
 
 Generated samples are in [`results/samples/`](results/samples). Open them in GarageBand or any MIDI player. `early_step_500.mid` is from early in training, for comparison.
 
+## Pitch bends (optional)
+
+In Indian classical music, much of the expression lives between the notes: slides, dips and oscillations called gamakas. MIDI stores these as pitch bends. My first version of the tokenizer kept only note pitches and threw the bends away, so the model could only jump between fixed pitches, and its output lacked gamakas.
+
+Setting `KEEP_PITCH_BENDS = True` keeps them:
+
+- A `BEND` token records the bend amount whenever it changes during a note, in quarter-semitone steps (`BEND=-2` is half a semitone flat, `BEND=0` is back in tune).
+- The timing grid becomes sixty-fourth notes, so short ornaments survive.
+- Only the points where the rounded bend changes are kept. Audio-to-MIDI converters write bends very densely, and every extra token uses up the 512-token context.
+- The decoder turns `BEND` tokens back into pitch bends for playback and the `.mid` output.
+
+```
+NOTE_ON=57 TIME_DELTA=15 BEND=-1 TIME_DELTA=1 BEND=-2 TIME_DELTA=1 BEND=-1 TIME_DELTA=2 BEND=0 TIME_DELTA=15 NOTE_OFF=57
+```
+
+That line is from a piece the model generated: it holds an A, dips half a semitone and comes back to pitch.
+
+**Tested on the example data**, not on Indian classical music, since the dataset built at Intel isn't included:
+
+- 1,833 of the 3,000 Lakh MIDI files contain pitch bends; 12,566 of the 40,983 pieces keep at least one `BEND` token, and bends are 0.6% of all tokens.
+- Every piece decodes back with the same number of pitch bends it was encoded with.
+- After 2,000 training steps (validation loss 1.13), 1 of 6 generated pieces used bends ([`pitch_bends_example.mid`](results/samples/pitch_bends_example.mid)). Bends are rare in Western pop, so the model learns them slowly; music where bends are central, like the Hindustani recordings this was built for, would give it far more to learn from.
+
 ## Run it
 
 1. Download MIDI files to train on, for example the [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/) (the Clean MIDI subset is a good size to start with), and upload the folder to Google Drive.
@@ -69,6 +92,7 @@ Everything the notebook produces is saved to `MyDrive/music_gpt2/`:
 - Each track is treated as one note at a time, so chords inside a track are spread out into short runs of notes.
 - Pieces are assumed to be in 4/4 and are played back at 120 BPM, because the tokens don't record tempo.
 - Drum tracks aren't marked separately, so they play back on a melodic instrument.
+- Pitch bends are off by default. When on, they assume the standard ±2-semitone bend range, and a bend the model never resets leaves the following notes out of tune.
 - Busy multi-track pieces longer than 512 tokens are truncated, which drops their last tracks.
 
 ## Data credits
