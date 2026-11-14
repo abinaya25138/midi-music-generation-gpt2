@@ -4,7 +4,7 @@
 
 A GPT-2 language model trained from scratch to compose multi-track MIDI music. MIDI files are cut into 8-bar pieces and written out as text, and the model learns to continue that text one musical event at a time. While it trains, it composes a new piece at every evaluation and plays it back, so you can hear it go from noise to music.
 
-I built this pipeline during my internship at Intel to generate Indian classical music. No MIDI dataset existed for this music, so we built one: we started from the [Thaat and Raga Forest (TRF) dataset](https://ieee-dataport.org/documents/thaat-and-raga-forest-trf-dataset) of Hindustani recordings, classified the recordings, and converted them into MIDI chunks by hand. That MIDI dataset isn't included here. The example run below uses public MIDI files to show the code working end to end.
+I built this pipeline during my internship at Intel to generate Indian classical music. No MIDI dataset existed for this music, so we built one: we started from the [Thaat and Raga Forest (TRF) dataset](https://ieee-dataport.org/documents/thaat-and-raga-forest-trf-dataset) of Hindustani recordings, classified the recordings, and converted them into MIDI chunks by hand. That MIDI dataset isn't included here. The example run below rebuilds a smaller version of it from two ragas of the same TRF recordings.
 
 ## How it works
 
@@ -25,24 +25,31 @@ I built this pipeline during my internship at Intel to generate Indian classical
 
 ## Example run
 
-To show the code working, I trained the notebook's pipeline on 3,000 songs from the public [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/) (Clean MIDI subset) on an Apple M4 laptop.
+I rebuilt a small Indian classical dataset from the TRF recordings and trained the notebook's pipeline on it, with pitch bends kept, on an Apple M4 laptop.
+
+1. **Recordings:** all 41 TRF recordings of two ragas, Kedar (Kalyan thaat) and Bihag (Bilaval thaat), 4.0 hours in total.
+2. **Audio to MIDI:** [`convert_audio_to_midi.py`](convert_audio_to_midi.py) runs Spotify's Basic Pitch with pitch bends on, so the gamakas survive as bends.
+3. **Training:** the notebook's own chunking, encoding, tokenizer and model code with `KEEP_PITCH_BENDS = True`.
 
 | | |
 |---|---|
-| Training pieces | 40,983 eight-bar pieces (36,884 for training, 1,000 held out for validation) |
-| Vocabulary | 434 tokens |
-| Model | GPT-2, 6 layers, 8 heads, 512-dim embeddings, 19.4M parameters, randomly initialized |
-| Training | 3,000 steps, batch size 16 (about 1.3 epochs) |
+| Training pieces | 892 eight-bar pieces: 834 from 37 recordings for training, 58 from 4 held-out recordings (two per raga) for validation |
+| Pitch bends | 98% of pieces contain `BEND` tokens |
+| Vocabulary | 254 tokens, 13 of them bend levels |
+| Model | GPT-2, 6 layers, 8 heads, 512-dim embeddings, 19.3M parameters, randomly initialized |
+| Training | 2,000 steps, batch size 16; samples come from the checkpoint with the lowest validation loss (step 750) |
 
 ![Training and validation loss](results/loss_curve.png)
 
-Validation loss fell from 1.93 to 0.99 over 3,000 steps and stayed below the training loss throughout, so the model is generalizing to pieces it hasn't seen rather than memorizing.
+Validation pieces come from whole recordings the model never trained on, so it can't score well by remembering a performance. Validation loss bottomed out at 2.02 at step 750; after that, training loss kept falling while validation loss rose, the model memorizing 37 recordings rather than learning more about the ragas. Four hours of music is small for a model this size, which is why the samples come from step 750.
 
-![Piano roll of a generated piece](results/generated_piano_roll.png)
+![Piano roll of a generated piece, showing pitch bends](results/generated_piano_roll.png)
 
-A piece the model composed from the prompt `PIECE_START TRACK_START`: a bass line with guitar phrases on top, across three instruments. At this stage the output has a steady pulse and plausible instrument parts, but it is repetitive; longer training would be the next step.
+A piece the model composed from the prompt `PIECE_START TRACK_START`. The shaded blocks are the notes as written; the line is the pitch you hear once the bends are applied. The model slides into notes and oscillates around them, the shapes of gamakas, rather than jumping between fixed pitches. Every one of the 8 pieces it composed uses bends. They are bent by half a semitone or more for 0% to 56% of their note time, within the range of the training recordings (4% to 73%), so the bends behave like the music's rather than leaving notes stuck out of tune.
 
-Generated samples are in [`results/samples/`](results/samples). Open them in GarageBand or any MIDI player. `early_step_500.mid` is from early in training, for comparison.
+Generated samples are in [`results/samples/`](results/samples). Open them in GarageBand or any MIDI player. They play on an electric piano, the instrument Basic Pitch assigns, not a sitar or voice. `early_step_500.mid` is from early in training, for comparison.
+
+What this run does not show: the notes don't yet follow a raga's rules. A note-by-note comparison with the training recordings is weak, partly because each recording is in a different key. Learning raga grammar from four hours of music is the open problem; more recordings, transposing every recording to a common tonic, and training with the raga as a label are the next steps.
 
 ## Pitch bends (optional)
 
@@ -56,20 +63,16 @@ Setting `KEEP_PITCH_BENDS = True` keeps them:
 - The decoder turns `BEND` tokens back into pitch bends for playback and the `.mid` output.
 
 ```
-NOTE_ON=57 TIME_DELTA=15 BEND=-1 TIME_DELTA=1 BEND=-2 TIME_DELTA=1 BEND=-1 TIME_DELTA=2 BEND=0 TIME_DELTA=15 NOTE_OFF=57
+NOTE_ON=56 BEND=3 TIME_DELTA=1 BEND=1 TIME_DELTA=3 BEND=3 TIME_DELTA=2 BEND=1 TIME_DELTA=1 BEND=3 TIME_DELTA=1 BEND=1 TIME_DELTA=1 BEND=3 TIME_DELTA=2 NOTE_OFF=56
 ```
 
-That line is from a piece the model generated: it holds an A, dips half a semitone and comes back to pitch.
+That line is from a piece the model generated in the example run: it holds a note and oscillates between a quarter and three quarters of a semitone above it, an andolan-like gamaka.
 
-**Tested on the example data**, not on Indian classical music, since the dataset built at Intel isn't included:
-
-- 1,833 of the 3,000 Lakh MIDI files contain pitch bends; 12,566 of the 40,983 pieces keep at least one `BEND` token, and bends are 0.6% of all tokens.
-- Every piece decodes back with the same number of pitch bends it was encoded with.
-- After 2,000 training steps (validation loss 1.13), 1 of 6 generated pieces used bends ([`pitch_bends_example.mid`](results/samples/pitch_bends_example.mid)). Bends are rare in Western pop, so the model learns them slowly; music where bends are central, like the Hindustani recordings this was built for, would give it far more to learn from.
+In the example run's raga recordings, bends are about 6% of all tokens and appear in 98% of pieces. Every piece decodes back with exactly the pitch bends it was encoded with. A check on 3,000 Western pop and rock MIDI files from the [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/) found bends in only 31% of pieces and 0.6% of tokens, and a model trained on them rarely used bends at all: these tokens matter far more for Indian classical music.
 
 ## Run it
 
-1. Download MIDI files to train on, for example the [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/) (the Clean MIDI subset is a good size to start with), and upload the folder to Google Drive.
+1. Get MIDI files to train on and upload the folder to Google Drive. To build Indian classical MIDI like the example run, download TRF recordings (from [Kaggle](https://www.kaggle.com/datasets/suryamajumder/thaat-and-raga-forest-trf-dataset) or IEEE DataPort) and convert them with `python convert_audio_to_midi.py AUDIO_DIR MIDI_DIR`, then set `KEEP_PITCH_BENDS = True`. Any other MIDI collection works too, such as the [Lakh MIDI Dataset](https://colinraffel.com/projects/lmd/).
 2. Open the notebook in Colab with the badge above and choose a GPU runtime.
 3. Set `MIDI_DIR` in the settings cell to that Drive folder, then run all cells.
 
@@ -97,9 +100,10 @@ Everything the notebook produces is saved to `MyDrive/music_gpt2/`:
 
 ## Data credits
 
-- **Thaat and Raga Forest (TRF) dataset**, the base for the Indian classical MIDI dataset built at Intel: S. Majumder and A. Bhattacharya, IEEE DataPort, 2024, [doi:10.21227/0xtb-fn23](https://doi.org/10.21227/0xtb-fn23), CC BY 4.0. Related paper: S. Majumder and A. Bhattacharya, "An automatic thaat and raga identification system using CNN-based models", *Innovations in Systems and Software Engineering*, 2023, [doi:10.1007/s11334-023-00541-2](https://doi.org/10.1007/s11334-023-00541-2).
-- **Lakh MIDI Dataset**, used for the example run: C. Raffel, *Learning-Based Methods for Comparing Sequences, with Applications to Audio-to-MIDI Alignment and Matching*, PhD thesis, Columbia University, 2016. [colinraffel.com/projects/lmd](https://colinraffel.com/projects/lmd/)
+- **Thaat and Raga Forest (TRF) dataset**, the base for the Indian classical MIDI dataset built at Intel and for the example run: S. Majumder and A. Bhattacharya, IEEE DataPort, 2024, [doi:10.21227/0xtb-fn23](https://doi.org/10.21227/0xtb-fn23), CC BY 4.0; also on [Kaggle](https://www.kaggle.com/datasets/suryamajumder/thaat-and-raga-forest-trf-dataset), where the example run's recordings came from. Related paper: S. Majumder and A. Bhattacharya, "An automatic thaat and raga identification system using CNN-based models", *Innovations in Systems and Software Engineering*, 2023, [doi:10.1007/s11334-023-00541-2](https://doi.org/10.1007/s11334-023-00541-2).
+- **Basic Pitch**, used to convert the recordings to MIDI: R. M. Bittner, J. J. Bosch, D. Rubinstein, G. Meseguer-Brocal and S. Ewert, "A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", ICASSP 2022. [github.com/spotify/basic-pitch](https://github.com/spotify/basic-pitch)
+- **Lakh MIDI Dataset**, used for the pitch-bend comparison: C. Raffel, *Learning-Based Methods for Comparing Sequences, with Applications to Audio-to-MIDI Alignment and Matching*, PhD thesis, Columbia University, 2016. [colinraffel.com/projects/lmd](https://colinraffel.com/projects/lmd/)
 
 ## Tech stack
 
-PyTorch, Hugging Face Transformers, Tokenizers and Datasets, miditoolkit, note_seq, FluidSynth, Weights & Biases (optional)
+PyTorch, Hugging Face Transformers, Tokenizers and Datasets, miditoolkit, note_seq, FluidSynth, Basic Pitch, Weights & Biases (optional)
